@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	stlbasic "github.com/kkkunny/stl/basic"
 	stlslices "github.com/kkkunny/stl/container/slices"
 	"github.com/sashabaranov/go-openai"
 	"golang.org/x/sync/errgroup"
@@ -47,8 +48,8 @@ func ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			return err
-		} else if listConvResp.Total == 0 {
-			return fmt.Errorf("can not find conversation")
+		} else if stlslices.Empty(listConvResp.Data) {
+			return nil
 		}
 		conv = stlslices.Random(listConvResp.Data)
 
@@ -89,11 +90,19 @@ func ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	prompt := fmt.Sprintf("%s\nassistant: ", strings.Join(msgStrList, ""))
 
 	chatResp, err := cli.ChatConversation(r.Context(), &api.ChatConversationRequest{
-		AppName:         conv.AppName,
-		ConversationID:  conv.ConversationID,
+		AppName: stlbasic.TernaryAction(conv == nil, func() string {
+			return ""
+		}, func() string {
+			return conv.AppName
+		}),
+		ConversationID: stlbasic.TernaryAction(conv == nil, func() string {
+			return ""
+		}, func() string {
+			return conv.ConversationID
+		}),
 		GlobalTimeout:   100,
 		MaxRetries:      1,
-		ModelName:       conv.ModelName,
+		ModelName:       req.Model,
 		ParentMessageID: lastMsgID,
 		Prompt:          prompt,
 		RequestTimeout:  30,
@@ -130,7 +139,7 @@ func ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			ID:      msgID,
 			Object:  "chat.completion",
 			Created: time.Now().Unix(),
-			Model:   conv.ModelName,
+			Model:   req.Model,
 			Choices: []openai.ChatCompletionChoice{
 				{
 					Index: 0,
@@ -180,7 +189,7 @@ func ChatCompletions(w http.ResponseWriter, r *http.Request) {
 					ID:      msgID,
 					Object:  "chat.completion",
 					Created: time.Now().Unix(),
-					Model:   conv.ModelName,
+					Model:   req.Model,
 					Choices: []openai.ChatCompletionStreamChoice{
 						{
 							Index: 0,
@@ -212,7 +221,7 @@ func ChatCompletions(w http.ResponseWriter, r *http.Request) {
 			ID:      msgID,
 			Object:  "chat.completion",
 			Created: time.Now().Unix(),
-			Model:   conv.ModelName,
+			Model:   req.Model,
 			Choices: []openai.ChatCompletionStreamChoice{
 				{
 					Index:        0,
